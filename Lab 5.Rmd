@@ -1,0 +1,168 @@
+---
+title: "Lab 5 - Principle Components"
+author: "Deanna Elliott"
+date: "2/3/2022"
+output: html_document
+---
+
+```{r setup, include=TRUE, message = FALSE, warning = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+
+library(tidyverse)
+library(here)
+
+### For part 1: PCA
+library(ggfortify)
+library(palmerpenguins)
+library(patchwork)
+
+### For part 2, ggplot customization
+library(readxl)
+library(gghighlight)
+library(lubridate)
+library(plotly)
+```
+
+### Part 1: Principle Component Analysis
+
+```{r}
+
+penguin_clean <- penguins %>% 
+  drop_na()
+
+penguin_pca <- penguin_clean %>% 
+  select(body_mass_g, ends_with('_mm')) %>% 
+  scale() %>% 
+  prcomp()
+```
+
+#### Biplot By Hand
+
+```{r}
+
+loadings_df <- data.frame(penguin_pca$rotation) %>% 
+  mutate(axis = row.names(.))
+
+new_pts_df <- data.frame(penguin_pca$x)
+
+ggplot() +
+  geom_point(data = new_pts_df, 
+             aes(x = PC1, y = PC2), color = "blue") +
+  geom_segment(data = loadings_df, x = 0, y = 0,
+               aes(xend = PC1, yend = PC2, group = axis),
+               arrow = arrow(length = unit(.25, 'cm'))) +
+  geom_text(data = loadings_df,
+            aes(x = PC1, y = PC2, label = axis),
+            vjust = 0, nudge_y = .02) +
+  theme_minimal()
+```
+
+### Automated Biplot
+
+```{r}
+autoplot(penguin_pca,
+         data = penguin_clean, 
+         loadings = TRUE,
+         colour = 'species',
+         loadings.label = TRUE,
+         loadings.colour = 'black',
+         loadings.label.colour = 'black',
+         loadings.label.vjust = -0.5) +
+  scale_color_manual(values = c('blue', 'red', 'orange')) +
+  theme_minimal()
+```
+
+### Screeplot By Hand
+
+```{r}
+
+sd_vec <- penguin_pca$sdev
+var_vec <- sd_vec^2
+
+pc_names <- colnames(penguin_pca$rotation)
+pct_ex_df <- data.frame(v = var_vec,
+                        pct_v = var_vec / sum(var_vec),
+                        pc = fct_inorder(pc_names)) %>% 
+  mutate(pct_lbl = paste0(round(pct_v * 100, 1), '%'))
+
+
+ggplot(pct_ex_df,
+       aes(x = pc, y = v)) +
+  geom_col() +
+  geom_text(aes(label = pct_lbl), vjust = 0, nudge_y = .025) +
+  labs(x = 'Principle Component', y = 'Variance Explained')
+```
+
+#### Automated Screeplot
+
+```{r}
+
+screeplot(penguin_pca, type = 'lines')
+screeplot(penguin_pca, type = 'barplot') # not as good as ggplot
+```
+
+### Part 2: Plot Customization
+
+```{r}
+
+fish_noaa <- read_excel(here("data", "foss_landings.xlsx")) %>% 
+  janitor::clean_names() %>% 
+  mutate(across(where(is.character), tolower)) %>% 
+  mutate(nmfs_name = str_sub(nmfs_name, end = -4)) %>% 
+  filter(confidentiality == 'public')
+```
+
+```{r}
+
+fish_plot <- ggplot(data = fish_noaa,
+                    aes(x = year, y = pounds, group = nmfs_name)) +
+  geom_line(aes(color = nmfs_name)) +
+  labs(x = "Year", y = "Pounds", color = "NMFS Name") %>% 
+  theme_minimal()
+
+ggplotly(fish_plot) ### interactive map
+```
+
+```{r}
+
+ggplot(data = fish_noaa,
+       aes(x = year, y = pounds, group = nmfs_name)) +
+  geom_line() + 
+  gghighlight(nmfs_name == 'rockfishes') +   ### emphasize certain variables
+  theme_minimal()
+
+ggplot(data = fish_noaa,
+       aes(x = year, y = pounds, group = nmfs_name)) +
+  geom_line(aes(color = nmfs_name)) + 
+  gghighlight(max(pounds) >  1e8) +
+  theme_minimal()
+```
+
+ Read in data from url and practice lubridate
+
+```{r}
+
+monroe_wt <- read_csv('https://raw.githubusercontent.com/oharac/esm244_w22_lab5/master/data/MWTP_Elec_Daily.csv') %>% 
+  janitor::clean_names()
+
+monroe_ts <- monroe_wt %>% 
+  mutate(date = lubridate::mdy(date)) %>% 
+  mutate(record_month = lubridate::month(date),
+         month_name = month.abb[record_month]) %>% 
+  mutate(month_name = fct_reorder(month_name, record_month))
+
+ggplot(data = monroe_ts,
+       aes(x = month_name, y = total_kwh)) +
+  geom_jitter(aes(color = month_name),
+              show.legend = FALSE,
+              alpha = 0.5,
+              size = 0.3,
+              height = 0,
+              width = 0.2) +
+  theme_classic()
+```
+
+
+
+
+
